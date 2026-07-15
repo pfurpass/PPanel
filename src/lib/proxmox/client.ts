@@ -1,4 +1,3 @@
-import { Agent } from "undici";
 import { proxmoxApiBase, proxmoxAuthHeader, proxmoxConfig } from "./config";
 import type {
   ClusterResource,
@@ -19,14 +18,19 @@ class ProxmoxApiError extends Error {
   }
 }
 
-function dispatcher() {
-  return new Agent({ connect: { rejectUnauthorized: proxmoxConfig.verifySsl() } });
+// Proxmox's default self-signed certificate can't be verified by Node's
+// trust store. Node's TLS layer (used by every fetch/http implementation,
+// regardless of which undici instance is involved) reads this env var at
+// connection time, so toggling it here is what actually takes effect.
+function applyTlsVerification() {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = proxmoxConfig.verifySsl() ? "1" : "0";
 }
 
 async function pveFetch<T>(
   path: string,
   init: { method?: string; body?: Record<string, unknown> } = {}
 ): Promise<T> {
+  applyTlsVerification();
   const url = `${proxmoxApiBase()}${path}`;
   const method = init.method ?? "GET";
 
@@ -51,8 +55,6 @@ async function pveFetch<T>(
       method,
       headers,
       body,
-      // @ts-expect-error - undici-specific option accepted by Next.js's fetch implementation
-      dispatcher: dispatcher(),
       cache: "no-store",
     });
   } catch (err) {
