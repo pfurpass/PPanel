@@ -45,14 +45,23 @@ async function pveFetch<T>(
     headers["Content-Type"] = "application/x-www-form-urlencoded";
   }
 
-  const res = await fetch(url, {
-    method,
-    headers,
-    body,
-    // @ts-expect-error - undici-specific option accepted by Next.js's fetch implementation
-    dispatcher: dispatcher(),
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers,
+      body,
+      // @ts-expect-error - undici-specific option accepted by Next.js's fetch implementation
+      dispatcher: dispatcher(),
+      cache: "no-store",
+    });
+  } catch (err) {
+    const cause = (err as { cause?: unknown }).cause;
+    const causeMessage = cause instanceof Error ? cause.message : cause ? String(cause) : undefined;
+    throw new Error(
+      `Konnte ${url} nicht erreichen: ${(err as Error).message}${causeMessage ? ` (${causeMessage})` : ""}`
+    );
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
