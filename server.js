@@ -84,6 +84,19 @@ app.prepare().then(() => {
       console.error("Proxmox VNC upstream error:", err.message);
       socket.destroy();
     });
+
+    upstream.on("unexpected-response", (_req, res) => {
+      let body = "";
+      res.on("data", (chunk) => {
+        body += chunk;
+      });
+      res.on("end", () => {
+        console.error(
+          `Proxmox VNC upstream rejected the websocket upgrade: HTTP ${res.statusCode} ${body}`
+        );
+        socket.destroy();
+      });
+    });
   });
 
   server.listen(port, () => {
