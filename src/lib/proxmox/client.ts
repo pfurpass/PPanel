@@ -1,0 +1,136 @@
+import { Agent } from "undici";
+import { proxmoxApiBase, proxmoxAuthHeader, proxmoxConfig } from "./config";
+import type {
+  ClusterResource,
+  GuestAction,
+  GuestType,
+  PveNode,
+  ProxmoxApiResponse,
+  StorageContentItem,
+  VncTicket,
+} from "./types";
+
+class ProxmoxApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+    this.name = "ProxmoxApiError";
+  }
+}
+
+function dispatcher() {
+  return new Agent({ connect: { rejectUnauthorized: proxmoxConfig.verifySsl() } });
+}
+
+async function pveFetch<T>(
+  path: string,
+  init: { method?: string; body?: Record<string, unknown> } = {}
+): Promise<T> {
+  const url = `${proxmoxApiBase()}${path}`;
+  const method = init.method ?? "GET";
+
+  let body: string | undefined;
+  const headers: Record<string, string> = {
+    Authorization: proxmoxAuthHeader(),
+  };
+
+  if (init.body) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(init.body)) {
+      if (value === undefined || value === null) continue;
+      params.set(key, String(value));
+    }
+    body = params.toString();
+    headers["Content-Type"] = "application/x-www-form-urlencoded";
+  }
+
+  const res = await fetch(url, {
+    method,
+    headers,
+    body,
+    // @ts-expect-error - undici-specific option accepted by Next.js's fetch implementation
+    dispatcher: dispatcher(),
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new ProxmoxApiError(res.status, `Proxmox API ${method} ${path} failed: ${res.status} ${text}`);
+  }
+
+  const json = (await res.json()) as ProxmoxApiResponse<T>;
+  return json.data;
+}
+
+export const proxmox = {
+  async version() {
+    return pveFetch<{ version: string; release: string }>("/version");
+  },
+
+  async nodes() {
+    return pveFetch<PveNode[]>("/nodes");
+  },
+
+  async nodeStatus(node: string) {
+    return pveFetch<Record<string, unknown>>(`/nodes/${encodeURIComponent(node)}/status`);
+  },
+
+  async clusterResources(type?: "vm" | "storage" | "node") {
+    const suffix = type ? `?type=${type}` : "";
+    return pveFetch<ClusterResource[]>(`/cluster/resources${suffix}`);
+  },
+
+  async guestConfig(node: string, type: GuestType, vmid: number) {
+    return pveFetch<Record<string, unknown>>(
+      `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/config`
+    );
+  },
+
+  async guestStatus(node: string, type: GuestType, vmid: number) {
+    return pveFetch<Record<string, unknown>>(
+      `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/status/current`
+    );
+  },
+
+  async guestAction(node: string, type: GuestType, vmid: number, action: GuestAction) {
+    return pveFetch<string>(
+      `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/status/${action}`,
+      { method: "POST" }
+    );
+  },
+
+  async storageContent(node: string, storage: string, content?: string) {
+    const suffix = content ? `?content=${content}` : "";
+    return pveFetch<StorageContentItem[]>(
+      `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/content${suffix}`
+    );
+  },
+
+  async createVm(node: string, params: Record<string, unknown>) {
+    return pveFetch<string>(`/nodes/${encodeURIComponent(node)}/qemu`, {
+      method: "POST",
+      body: params,
+    });
+  },
+
+  async createLxc(node: string, params: Record<string, unknown>) {
+    return pveFetch<string>(`/nodes/${encodeURIComponent(node)}/lxc`, {
+      method: "POST",
+      body: params,
+    });
+  },
+
+  async vncProxy(node: string, type: GuestType, vmid: number) {
+    return pveFetch<VncTicket>(
+      `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/vncproxy`,
+      { method: "POST", body: { websocket: 1 } }
+    );
+  },
+
+  async nextVmid() {
+    return pveFetch<string>("/cluster/nextid");
+  },
+};
+
+export { ProxmoxApiError };
