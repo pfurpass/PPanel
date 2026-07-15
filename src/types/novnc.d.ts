@@ -2,6 +2,7 @@ declare module "@novnc/novnc" {
   export default class RFB {
     constructor(target: HTMLElement, url: string, options?: Record<string, unknown>);
     scaleViewport: boolean;
+    clipViewport: boolean;
     resizeSession: boolean;
     viewOnly: boolean;
     disconnect(): void;
