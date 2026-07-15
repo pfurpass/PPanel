@@ -95,12 +95,14 @@ export function GuestConsole({
         </div>
       )}
 
-      <div
-        ref={containerRef}
-        className="flex min-h-[360px] items-center justify-center overflow-hidden rounded-lg bg-black"
-      >
+      <div className="relative min-h-[360px] overflow-hidden rounded-lg bg-black">
+        {/* noVNC takes ownership of this node's DOM children directly; it must
+            never also be a React render target, or the two will fight over
+            child nodes and crash on unmount/update. */}
+        <div ref={containerRef} className="absolute inset-0" />
+
         {status !== "connected" && (
-          <p className="text-xs text-muted">
+          <p className="absolute inset-0 flex items-center justify-center text-xs text-muted">
             {status === "connecting" ? "Verbindung wird aufgebaut..." : "Noch keine Verbindung"}
           </p>
         )}
