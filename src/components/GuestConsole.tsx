@@ -37,7 +37,13 @@ export function GuestConsole({
       if (!containerRef.current) return;
       containerRef.current.innerHTML = "";
 
-      const rfb = new RFBClient(containerRef.current, url, { wsProtocols: ["binary"] });
+      const rfb = new RFBClient(containerRef.current, url, {
+        wsProtocols: ["binary"],
+        // Proxmox's VNC server authenticates the RFB handshake itself
+        // (separately from the websocket tunnel) using the same ticket
+        // as the VNC Authentication password.
+        credentials: { password: json.vncPassword },
+      });
       rfb.scaleViewport = true;
       rfb.resizeSession = true;
 
@@ -46,6 +52,11 @@ export function GuestConsole({
         setStatus("idle");
         const clean = (e as CustomEvent<{ clean: boolean }>).detail?.clean;
         if (!clean) setErrorMsg("Verbindung zur Konsole wurde getrennt.");
+      });
+      rfb.addEventListener("securityfailure", (e) => {
+        const reason = (e as CustomEvent<{ reason?: string; status?: number }>).detail;
+        setStatus("error");
+        setErrorMsg(`VNC-Authentifizierung fehlgeschlagen: ${reason?.reason ?? reason?.status ?? "unbekannt"}`);
       });
 
       rfbRef.current = rfb;
