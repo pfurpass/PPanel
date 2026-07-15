@@ -12,12 +12,24 @@ interface CreatePayload {
   diskGb: number;
   storage: string;
   bridge: string;
+  vlanTag?: number;
+  firewall?: boolean;
   // qemu-only
   isoVolid?: string;
   // lxc-only
   templateVolid?: string;
   password?: string;
   unprivileged?: boolean;
+  ipMode?: "dhcp" | "static";
+  ipAddress?: string;
+  gateway?: string;
+}
+
+function buildNetString(base: string, opts: { vlanTag?: number; firewall?: boolean }): string {
+  const parts = [base];
+  if (opts.vlanTag) parts.push(`tag=${opts.vlanTag}`);
+  parts.push(`firewall=${opts.firewall ? 1 : 0}`);
+  return parts.join(",");
 }
 
 export async function POST(req: Request) {
@@ -44,7 +56,7 @@ export async function POST(req: Request) {
         name,
         cores,
         memory,
-        net0: `virtio,bridge=${bridge}`,
+        net0: buildNetString(`virtio,bridge=${bridge}`, payload),
         scsihw: "virtio-scsi-pci",
         scsi0: `${storage}:${diskGb}`,
         ide2: payload.isoVolid ? `${payload.isoVolid},media=cdrom` : undefined,
@@ -58,13 +70,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "templateVolid ist für LXC erforderlich." }, { status: 400 });
     }
 
+    const ipConfig =
+      payload.ipMode === "static"
+        ? `ip=${payload.ipAddress}${payload.gateway ? `,gw=${payload.gateway}` : ""}`
+        : "ip=dhcp";
+
     const task = await proxmox.createLxc(node, {
       vmid,
       hostname: name,
       cores,
       memory,
       swap: memory,
-      net0: `name=eth0,bridge=${bridge},ip=dhcp`,
+      net0: buildNetString(`name=eth0,bridge=${bridge},${ipConfig}`, payload),
       rootfs: `${storage}:${diskGb}`,
       ostemplate: payload.templateVolid,
       password: payload.password,

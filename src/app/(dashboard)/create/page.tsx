@@ -25,6 +25,11 @@ export default function CreatePage() {
   const [diskGb, setDiskGb] = useState(20);
   const [selectedStorage, setSelectedStorage] = useState<string | null>(null);
   const [bridge, setBridge] = useState("vmbr0");
+  const [vlanTag, setVlanTag] = useState("");
+  const [firewall, setFirewall] = useState(true);
+  const [ipMode, setIpMode] = useState<"dhcp" | "static">("dhcp");
+  const [ipAddress, setIpAddress] = useState("");
+  const [gateway, setGateway] = useState("");
   const [isoVolid, setIsoVolid] = useState("");
   const [templateVolid, setTemplateVolid] = useState("");
   const [password, setPassword] = useState("");
@@ -74,9 +79,14 @@ export default function CreatePage() {
           diskGb,
           storage,
           bridge,
+          vlanTag: vlanTag ? Number(vlanTag) : undefined,
+          firewall,
           isoVolid: kind === "qemu" ? isoVolid || undefined : undefined,
           templateVolid: kind === "lxc" ? templateVolid || undefined : undefined,
           password: kind === "lxc" ? password : undefined,
+          ipMode: kind === "lxc" ? ipMode : undefined,
+          ipAddress: kind === "lxc" && ipMode === "static" ? ipAddress : undefined,
+          gateway: kind === "lxc" && ipMode === "static" ? gateway || undefined : undefined,
         }),
       });
       const json = await res.json();
@@ -167,9 +177,87 @@ export default function CreatePage() {
               </Field>
             </div>
 
-            <Field label="Netzwerk-Bridge">
-              <input value={bridge} onChange={(e) => setBridge(e.target.value)} className={inputClass} />
-            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Netzwerk-Bridge">
+                <input value={bridge} onChange={(e) => setBridge(e.target.value)} className={inputClass} />
+              </Field>
+              <Field label="VLAN-Tag (optional)">
+                <input
+                  type="number"
+                  min={1}
+                  max={4094}
+                  value={vlanTag}
+                  onChange={(e) => setVlanTag(e.target.value)}
+                  placeholder="z.B. 10"
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+
+            <label className="flex items-center gap-2 text-xs font-medium text-muted">
+              <input
+                type="checkbox"
+                checked={firewall}
+                onChange={(e) => setFirewall(e.target.checked)}
+                className="h-4 w-4 rounded border-white/20 bg-white/[0.03] accent-accent"
+              />
+              Proxmox-Firewall für diese Netzwerkschnittstelle aktivieren
+            </label>
+
+            {kind === "lxc" && (
+              <>
+                <Field label="IP-Konfiguration">
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIpMode("dhcp")}
+                      className={clsx(
+                        "rounded-lg border px-3 py-2 text-sm font-medium transition",
+                        ipMode === "dhcp"
+                          ? "border-accent/50 bg-accent/10 text-white"
+                          : "border-white/10 text-muted hover:text-white"
+                      )}
+                    >
+                      DHCP
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIpMode("static")}
+                      className={clsx(
+                        "rounded-lg border px-3 py-2 text-sm font-medium transition",
+                        ipMode === "static"
+                          ? "border-accent/50 bg-accent/10 text-white"
+                          : "border-white/10 text-muted hover:text-white"
+                      )}
+                    >
+                      Statisch
+                    </button>
+                  </div>
+                </Field>
+
+                {ipMode === "static" && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="IP-Adresse (CIDR)">
+                      <input
+                        value={ipAddress}
+                        onChange={(e) => setIpAddress(e.target.value)}
+                        required
+                        placeholder="192.168.1.50/24"
+                        className={inputClass}
+                      />
+                    </Field>
+                    <Field label="Gateway">
+                      <input
+                        value={gateway}
+                        onChange={(e) => setGateway(e.target.value)}
+                        placeholder="192.168.1.1"
+                        className={inputClass}
+                      />
+                    </Field>
+                  </div>
+                )}
+              </>
+            )}
 
             {kind === "qemu" ? (
               <Field label="ISO-Image (optional)">
