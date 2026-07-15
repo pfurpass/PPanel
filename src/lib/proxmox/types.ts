@@ -80,3 +80,15 @@ export interface StorageContentItem {
   size: number;
   format?: string;
 }
+
+export interface NodeStorage {
+  storage: string;
+  type: string;
+  // comma-separated list of allowed content types, e.g. "images,rootdir"
+  // or "iso,vztmpl,backup" - a "dir" storage like the default "local" often
+  // only allows the latter, while VM/CT disks need "images"/"rootdir".
+  content: string;
+  active: boolean;
+  avail: number;
+  total: number;
+}

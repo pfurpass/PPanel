@@ -3,6 +3,7 @@ import type {
   ClusterResource,
   GuestAction,
   GuestType,
+  NodeStorage,
   PveNode,
   ProxmoxApiResponse,
   StorageContentItem,
@@ -90,6 +91,10 @@ export const proxmox = {
   async clusterResources(type?: "vm" | "storage" | "node") {
     const suffix = type ? `?type=${type}` : "";
     return pveFetch<ClusterResource[]>(`/cluster/resources${suffix}`);
+  },
+
+  async nodeStorages(node: string) {
+    return pveFetch<NodeStorage[]>(`/nodes/${encodeURIComponent(node)}/storage`);
   },
 
   async guestConfig(node: string, type: GuestType, vmid: number) {

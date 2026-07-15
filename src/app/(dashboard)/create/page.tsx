@@ -7,15 +7,18 @@ import clsx from "clsx";
 import { Topbar } from "@/components/Topbar";
 import { NotConfigured } from "@/components/NotConfigured";
 import { useResources } from "@/lib/useResources";
-import type { StorageContentItem } from "@/lib/proxmox/types";
+import type { NodeStorage, StorageContentItem } from "@/lib/proxmox/types";
 
 type GuestKind = "qemu" | "lxc";
+
+function hasContent(s: NodeStorage, type: string) {
+  return s.content.split(",").includes(type);
+}
 
 export default function CreatePage() {
   const router = useRouter();
   const { data, notConfigured, error: resError } = useResources(0);
   const nodes = useMemo(() => data?.nodes.filter((n) => n.status === "online") ?? [], [data]);
-  const storages = useMemo(() => data?.storages ?? [], [data]);
 
   const [kind, setKind] = useState<GuestKind>("qemu");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -23,7 +26,9 @@ export default function CreatePage() {
   const [cores, setCores] = useState(2);
   const [memory, setMemory] = useState(2048);
   const [diskGb, setDiskGb] = useState(20);
-  const [selectedStorage, setSelectedStorage] = useState<string | null>(null);
+  const [nodeStorages, setNodeStorages] = useState<NodeStorage[]>([]);
+  const [selectedDiskStorage, setSelectedDiskStorage] = useState<string | null>(null);
+  const [selectedMediaStorage, setSelectedMediaStorage] = useState<string | null>(null);
   const [bridge, setBridge] = useState("vmbr0");
   const [vlanTag, setVlanTag] = useState("");
   const [firewall, setFirewall] = useState(true);
@@ -45,22 +50,46 @@ export default function CreatePage() {
   // is empty or no longer valid for the current node/kind.
   const node = nodes.some((n) => n.node === selectedNode) ? (selectedNode as string) : (nodes[0]?.node ?? "");
 
-  const storagesForNode = useMemo(() => storages.filter((s) => s.node === node), [storages, node]);
-  const storage = storagesForNode.some((s) => s.storage === selectedStorage)
-    ? (selectedStorage as string)
-    : (storagesForNode[0]?.storage ?? "");
+  useEffect(() => {
+    if (!node) return;
+    fetch(`/api/storage/${node}`)
+      .then((r) => r.json())
+      .then((json) => setNodeStorages(json.storages ?? []))
+      .catch(() => setNodeStorages([]));
+  }, [node]);
+
+  // "local" (dir storage) commonly only allows iso/vztmpl/backup, while
+  // "local-lvm" (or other block storage) only allows images/rootdir - VM
+  // disks and CT root filesystems need a storage that supports the
+  // former, ISOs/templates need one that supports the latter, and those
+  // are frequently two different storages.
+  const diskStorages = useMemo(
+    () => nodeStorages.filter((s) => hasContent(s, "images") || hasContent(s, "rootdir")),
+    [nodeStorages]
+  );
+  const mediaStorages = useMemo(
+    () => nodeStorages.filter((s) => hasContent(s, kind === "qemu" ? "iso" : "vztmpl")),
+    [nodeStorages, kind]
+  );
+
+  const diskStorage = diskStorages.some((s) => s.storage === selectedDiskStorage)
+    ? (selectedDiskStorage as string)
+    : (diskStorages[0]?.storage ?? "");
+  const mediaStorage = mediaStorages.some((s) => s.storage === selectedMediaStorage)
+    ? (selectedMediaStorage as string)
+    : (mediaStorages[0]?.storage ?? "");
 
   useEffect(() => {
-    if (!node || !storage) return;
+    if (!node || !mediaStorage) return;
     const contentType = kind === "qemu" ? "iso" : "vztmpl";
-    fetch(`/api/storage/${node}/${storage}/content?content=${contentType}`)
+    fetch(`/api/storage/${node}/${mediaStorage}/content?content=${contentType}`)
       .then((r) => r.json())
       .then((json) => {
         if (kind === "qemu") setIsoOptions(json.items ?? []);
         else setTemplateOptions(json.items ?? []);
       })
       .catch(() => {});
-  }, [node, storage, kind]);
+  }, [node, mediaStorage, kind]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -77,7 +106,7 @@ export default function CreatePage() {
           cores,
           memory,
           diskGb,
-          storage,
+          storage: diskStorage,
           bridge,
           vlanTag: vlanTag ? Number(vlanTag) : undefined,
           firewall,
@@ -166,16 +195,34 @@ export default function CreatePage() {
                   className={inputClass}
                 />
               </Field>
-              <Field label="Storage">
-                <select value={storage} onChange={(e) => setSelectedStorage(e.target.value)} className={selectClass}>
-                  {storagesForNode.map((s) => (
-                    <option key={s.id} value={s.storage}>
+              <Field label={kind === "qemu" ? "Disk-Storage" : "Rootfs-Storage"}>
+                <select
+                  value={diskStorage}
+                  onChange={(e) => setSelectedDiskStorage(e.target.value)}
+                  className={selectClass}
+                >
+                  {diskStorages.map((s) => (
+                    <option key={s.storage} value={s.storage}>
                       {s.storage}
                     </option>
                   ))}
                 </select>
               </Field>
             </div>
+
+            <Field label={kind === "qemu" ? "ISO-Storage" : "Template-Storage"}>
+              <select
+                value={mediaStorage}
+                onChange={(e) => setSelectedMediaStorage(e.target.value)}
+                className={selectClass}
+              >
+                {mediaStorages.map((s) => (
+                  <option key={s.storage} value={s.storage}>
+                    {s.storage}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Netzwerk-Bridge">
