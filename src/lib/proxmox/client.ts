@@ -116,6 +116,20 @@ export const proxmox = {
     );
   },
 
+  async updateGuestConfig(node: string, type: GuestType, vmid: number, params: Record<string, unknown>) {
+    return pveFetch<string | null>(`/nodes/${encodeURIComponent(node)}/${type}/${vmid}/config`, {
+      method: "PUT",
+      body: params,
+    });
+  },
+
+  async resizeDisk(node: string, type: GuestType, vmid: number, disk: string, size: string) {
+    return pveFetch<string | null>(`/nodes/${encodeURIComponent(node)}/${type}/${vmid}/resize`, {
+      method: "PUT",
+      body: { disk, size },
+    });
+  },
+
   async deleteGuest(node: string, type: GuestType, vmid: number, opts?: { purge?: boolean }) {
     const suffix = opts?.purge ? "?purge=1" : "";
     return pveFetch<string>(`/nodes/${encodeURIComponent(node)}/${type}/${vmid}${suffix}`, {

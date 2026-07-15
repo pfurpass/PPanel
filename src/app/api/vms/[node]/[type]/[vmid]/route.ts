@@ -28,6 +28,39 @@ export async function GET(
   }
 }
 
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ node: string; type: string; vmid: string }> }
+) {
+  if (!isProxmoxConfigured()) {
+    return NextResponse.json({ error: "Proxmox ist nicht konfiguriert." }, { status: 503 });
+  }
+  const { node, type, vmid } = await params;
+  const guestType = type as GuestType;
+  if (guestType !== "qemu" && guestType !== "lxc") {
+    return NextResponse.json({ error: "Ungültiger Typ" }, { status: 400 });
+  }
+
+  const body = (await req.json().catch(() => null)) as { cores?: number; memory?: number } | null;
+  if (!body || (!body.cores && !body.memory)) {
+    return NextResponse.json({ error: "cores und/oder memory erforderlich." }, { status: 400 });
+  }
+
+  try {
+    const params: Record<string, unknown> = {};
+    if (body.cores) params.cores = body.cores;
+    if (body.memory) {
+      params.memory = body.memory;
+      if (guestType === "lxc") params.swap = body.memory;
+    }
+    await proxmox.updateGuestConfig(node, guestType, Number(vmid), params);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const httpStatus = err instanceof ProxmoxApiError ? err.status : 502;
+    return NextResponse.json({ error: (err as Error).message }, { status: httpStatus });
+  }
+}
+
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ node: string; type: string; vmid: string }> }

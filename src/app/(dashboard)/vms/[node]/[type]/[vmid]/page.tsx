@@ -8,6 +8,7 @@ import { Topbar } from "@/components/Topbar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { UsageBar } from "@/components/UsageBar";
 import { GuestConsole } from "@/components/GuestConsole";
+import { HardwareEditor } from "@/components/HardwareEditor";
 import { formatBytes, formatUptime, percent } from "@/lib/proxmox/mappers";
 import type { GuestType } from "@/lib/proxmox/types";
 import Link from "next/link";
@@ -177,6 +178,16 @@ export default function GuestDetailPage() {
             />
           </div>
         </div>
+
+        {detail?.config && (
+          <HardwareEditor
+            node={node}
+            type={type}
+            vmid={vmid}
+            config={detail.config}
+            onSaved={() => mutate()}
+          />
+        )}
 
         <GuestConsole node={node} type={type} vmid={vmid} />
 
