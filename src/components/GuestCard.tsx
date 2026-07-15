@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Play, Square, RotateCw, Settings2, Cpu, MemoryStick, HardDrive } from "lucide-react";
+import { Play, Square, RotateCw, Settings2, Cpu, MemoryStick, HardDrive, Trash2 } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { UsageBar } from "./UsageBar";
 import { formatBytes, formatUptime, percent } from "@/lib/proxmox/mappers";
@@ -20,6 +20,17 @@ export function GuestCard({ guest, onChanged }: { guest: GuestSummary; onChanged
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
+      onChanged?.();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(`${guest.name} (VMID ${guest.vmid}) wirklich unwiderruflich löschen?`)) return;
+    setBusy("delete");
+    try {
+      await fetch(`/api/vms/${guest.node}/${guest.type}/${guest.vmid}`, { method: "DELETE" });
       onChanged?.();
     } finally {
       setBusy(null);
@@ -91,9 +102,14 @@ export function GuestCard({ guest, onChanged }: { guest: GuestSummary; onChanged
               </IconButton>
             </>
           ) : (
-            <IconButton title="Starten" onClick={() => runAction("start")} busy={busy === "start"}>
-              <Play size={15} />
-            </IconButton>
+            <>
+              <IconButton title="Starten" onClick={() => runAction("start")} busy={busy === "start"}>
+                <Play size={15} />
+              </IconButton>
+              <IconButton title="Löschen" onClick={handleDelete} busy={busy === "delete"} danger>
+                <Trash2 size={15} />
+              </IconButton>
+            </>
           )}
         </div>
         <Link
@@ -113,18 +129,24 @@ function IconButton({
   onClick,
   title,
   busy,
+  danger,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   title: string;
   busy?: boolean;
+  danger?: boolean;
 }) {
   return (
     <button
       title={title}
       disabled={busy}
       onClick={onClick}
-      className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-muted transition hover:border-white/20 hover:text-white disabled:opacity-40"
+      className={`flex h-8 w-8 items-center justify-center rounded-lg border transition disabled:opacity-40 ${
+        danger
+          ? "border-offline/30 text-offline hover:bg-offline/10"
+          : "border-white/10 text-muted hover:border-white/20 hover:text-white"
+      }`}
     >
       {children}
     </button>

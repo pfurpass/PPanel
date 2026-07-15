@@ -116,6 +116,13 @@ export const proxmox = {
     );
   },
 
+  async deleteGuest(node: string, type: GuestType, vmid: number, opts?: { purge?: boolean }) {
+    const suffix = opts?.purge ? "?purge=1" : "";
+    return pveFetch<string>(`/nodes/${encodeURIComponent(node)}/${type}/${vmid}${suffix}`, {
+      method: "DELETE",
+    });
+  },
+
   async storageContent(node: string, storage: string, content?: string) {
     const suffix = content ? `?content=${content}` : "";
     return pveFetch<StorageContentItem[]>(

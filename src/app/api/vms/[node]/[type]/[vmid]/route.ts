@@ -27,3 +27,25 @@ export async function GET(
     return NextResponse.json({ error: (err as Error).message }, { status: httpStatus });
   }
 }
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ node: string; type: string; vmid: string }> }
+) {
+  if (!isProxmoxConfigured()) {
+    return NextResponse.json({ error: "Proxmox ist nicht konfiguriert." }, { status: 503 });
+  }
+  const { node, type, vmid } = await params;
+  const guestType = type as GuestType;
+  if (guestType !== "qemu" && guestType !== "lxc") {
+    return NextResponse.json({ error: "Ungültiger Typ" }, { status: 400 });
+  }
+
+  try {
+    const task = await proxmox.deleteGuest(node, guestType, Number(vmid), { purge: true });
+    return NextResponse.json({ task });
+  } catch (err) {
+    const httpStatus = err instanceof ProxmoxApiError ? err.status : 502;
+    return NextResponse.json({ error: (err as Error).message }, { status: httpStatus });
+  }
+}

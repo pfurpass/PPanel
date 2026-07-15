@@ -3,7 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
-import { Play, Square, RotateCw, PowerOff, ArrowLeft, Cpu, MemoryStick, HardDrive } from "lucide-react";
+import { Play, Square, RotateCw, PowerOff, ArrowLeft, Cpu, MemoryStick, HardDrive, Trash2, Loader2 } from "lucide-react";
 import { Topbar } from "@/components/Topbar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { UsageBar } from "@/components/UsageBar";
@@ -51,6 +51,7 @@ export default function GuestDetailPage() {
   });
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const error = actionError ?? (swrError ? swrError.message : null);
 
   async function runAction(action: "start" | "stop" | "reboot" | "shutdown") {
@@ -75,6 +76,27 @@ export default function GuestDetailPage() {
   const name = (detail?.config?.name as string) || (detail?.config?.hostname as string) || `${type}-${vmid}`;
   const status = detail?.status?.status ?? "unknown";
   const running = status === "running";
+
+  async function handleDelete() {
+    if (
+      !window.confirm(
+        `${name} (VMID ${vmid}) wirklich unwiderruflich löschen? Alle Disks/Rootfs werden mit entfernt.`
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/vms/${node}/${type}/${vmid}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Löschen fehlgeschlagen");
+      router.push(type === "qemu" ? "/vms" : "/containers");
+    } catch (err) {
+      setActionError((err as Error).message);
+      setDeleting(false);
+    }
+  }
 
   return (
     <>
@@ -124,6 +146,16 @@ export default function GuestDetailPage() {
                   Starten
                 </ActionButton>
               )}
+              <ActionButton
+                onClick={handleDelete}
+                busy={deleting}
+                icon={deleting ? Loader2 : Trash2}
+                danger
+                disabled={running}
+                title={running ? "Zum Löschen zuerst stoppen" : undefined}
+              >
+                Löschen
+              </ActionButton>
             </div>
           </div>
 
@@ -177,18 +209,23 @@ function ActionButton({
   icon: Icon,
   primary,
   danger,
+  disabled,
+  title,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   busy?: boolean;
-  icon: React.ComponentType<{ size?: number }>;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
   primary?: boolean;
   danger?: boolean;
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <button
       onClick={onClick}
-      disabled={busy}
+      disabled={busy || disabled}
+      title={title}
       className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition disabled:opacity-50 ${
         primary
           ? "bg-gradient-to-r from-accent to-accent-2 text-white hover:brightness-110"
@@ -197,7 +234,7 @@ function ActionButton({
             : "border border-white/10 text-muted hover:text-white"
       }`}
     >
-      <Icon size={14} />
+      <Icon size={14} className={busy ? "animate-spin" : undefined} />
       {children}
     </button>
   );
